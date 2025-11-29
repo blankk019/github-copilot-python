@@ -129,14 +129,12 @@ export class SudokuGame {
     val = val.replace(/[^1-9]/g, "");
     cell.value = val;
 
-    // Remove invalid-move class when user changes input
-    cell.classList.remove("invalid-move");
-
     if (val) {
       const num = parseInt(val);
       await this.validateMove(cell, num);
     } else {
-      // Clear conflicts when cell is emptied
+      // Clear all highlights when cell is emptied
+      cell.classList.remove("invalid-move");
       this.clearConflictHighlights();
       this.ui.clearMessage();
     }
@@ -369,8 +367,16 @@ export class SudokuGame {
     const row = parseInt(cellInput.dataset.row);
     const col = parseInt(cellInput.dataset.col);
     const board = this.getCurrentBoard();
+    // Place the tentative number logically for local conflict check
+    board[row][col] = num;
 
-    board[row][col] = 0; // Temporarily set to 0 for validation
+    // Client-side conflict detection for instant feedback
+    const localConflicts = this.getLocalConflicts(board, row, col, num);
+    if (localConflicts.length > 0) {
+      cellInput.classList.add("invalid-move");
+      this.highlightConflicts(localConflicts, row, col, num);
+      return; // Skip server validation; already invalid
+    }
 
     try {
       const response = await fetch(API_ENDPOINTS.VALIDATE_MOVE, {
@@ -378,9 +384,7 @@ export class SudokuGame {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ board, row, col, num }),
       });
-
       const data = await response.json();
-
       if (data.valid) {
         cellInput.classList.remove("invalid-move");
         this.clearConflictHighlights();
@@ -395,6 +399,51 @@ export class SudokuGame {
   }
 
   /**
+   * Compute local conflicts without server round-trip
+   * @param {Array} board - Current board with tentative value placed
+   * @param {number} row
+   * @param {number} col
+   * @param {number} num
+   * @returns {Array} conflicts objects {row,col,type}
+   * @private
+   */
+  getLocalConflicts(board, row, col, num) {
+    const conflicts = [];
+    // Row
+    for (let c = 0; c < GAME_CONFIG.SIZE; c++) {
+      if (c !== col && board[row][c] === num) {
+        conflicts.push({ row, col: c, type: "row" });
+      }
+    }
+    // Column
+    for (let r = 0; r < GAME_CONFIG.SIZE; r++) {
+      if (r !== row && board[r][col] === num) {
+        conflicts.push({ row: r, col, type: "column" });
+      }
+    }
+    // Box
+    const startRow = row - (row % 3);
+    const startCol = col - (col % 3);
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const r = startRow + i;
+        const c = startCol + j;
+        if ((r !== row || c !== col) && board[r][c] === num) {
+          conflicts.push({ row: r, col: c, type: "box" });
+        }
+      }
+    }
+    // Deduplicate (in rare edge cases)
+    const seen = new Set();
+    return conflicts.filter((c) => {
+      const key = `${c.row}-${c.col}-${c.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  /**
    * Highlight conflicting cells
    * @param {Array} conflicts - Array of conflict objects with row, col, and type
    * @param {number} currentRow - Current cell row
@@ -403,6 +452,7 @@ export class SudokuGame {
    * @private
    */
   highlightConflicts(conflicts, currentRow, currentCol, num) {
+    // Clear previous conflict highlights first
     this.clearConflictHighlights();
 
     if (!conflicts || conflicts.length === 0) return;
