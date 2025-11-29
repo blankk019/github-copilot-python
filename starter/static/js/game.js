@@ -135,6 +135,10 @@ export class SudokuGame {
     if (val) {
       const num = parseInt(val);
       await this.validateMove(cell, num);
+    } else {
+      // Clear conflicts when cell is emptied
+      this.clearConflictHighlights();
+      this.ui.clearMessage();
     }
   }
 
@@ -182,6 +186,7 @@ export class SudokuGame {
       this.ui.updateHintCounter(0);
       this.ui.clearMessage();
       this.ui.removeCelebration();
+      this.clearConflictHighlights();
 
       this.timer.reset();
       this.gameStarted = false;
@@ -378,12 +383,67 @@ export class SudokuGame {
 
       if (data.valid) {
         cellInput.classList.remove("invalid-move");
+        this.clearConflictHighlights();
         await this.checkPuzzleCompletion();
       } else {
         cellInput.classList.add("invalid-move");
+        this.highlightConflicts(data.conflicts, row, col, num);
       }
     } catch (error) {
       console.error("Error validating move:", error);
+    }
+  }
+
+  /**
+   * Highlight conflicting cells
+   * @param {Array} conflicts - Array of conflict objects with row, col, and type
+   * @param {number} currentRow - Current cell row
+   * @param {number} currentCol - Current cell column
+   * @param {number} num - The conflicting number
+   * @private
+   */
+  highlightConflicts(conflicts, currentRow, currentCol, num) {
+    this.clearConflictHighlights();
+
+    if (!conflicts || conflicts.length === 0) return;
+
+    const boardDiv = document.getElementById("sudoku-board");
+    const inputs = boardDiv.getElementsByTagName("input");
+
+    // Group conflicts by type for the message
+    const conflictTypes = new Set(conflicts.map((c) => c.type));
+    const conflictMessages = [];
+
+    if (conflictTypes.has("row")) conflictMessages.push("same row");
+    if (conflictTypes.has("column")) conflictMessages.push("same column");
+    if (conflictTypes.has("box")) conflictMessages.push("same 3×3 box");
+
+    // Highlight each conflicting cell
+    conflicts.forEach((conflict) => {
+      const idx = conflict.row * GAME_CONFIG.SIZE + conflict.col;
+      const conflictCell = inputs[idx];
+      if (conflictCell) {
+        conflictCell.classList.add("conflict-cell");
+        conflictCell.dataset.conflictType = conflict.type;
+      }
+    });
+
+    // Show message explaining the conflict
+    const message = `${num} already exists in ${conflictMessages.join(", ")}`;
+    this.ui.showMessage(message, "error");
+  }
+
+  /**
+   * Clear all conflict highlights
+   * @private
+   */
+  clearConflictHighlights() {
+    const boardDiv = document.getElementById("sudoku-board");
+    const inputs = boardDiv.getElementsByTagName("input");
+
+    for (let input of inputs) {
+      input.classList.remove("conflict-cell");
+      delete input.dataset.conflictType;
     }
   }
 

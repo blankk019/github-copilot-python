@@ -72,7 +72,30 @@ def validate_move():
     # Check if the move is valid according to Sudoku rules
     is_valid = sudoku_logic.is_safe(board, row, col, num)
     
-    return jsonify({'valid': is_valid})
+    conflicts = []
+    if not is_valid:
+        # Find all conflicting cells
+        # Check row conflicts
+        for c in range(sudoku_logic.SIZE):
+            if c != col and board[row][c] == num:
+                conflicts.append({'row': row, 'col': c, 'type': 'row'})
+        
+        # Check column conflicts
+        for r in range(sudoku_logic.SIZE):
+            if r != row and board[r][col] == num:
+                conflicts.append({'row': r, 'col': col, 'type': 'column'})
+        
+        # Check 3x3 box conflicts
+        start_row = row - row % 3
+        start_col = col - col % 3
+        for i in range(3):
+            for j in range(3):
+                r = start_row + i
+                c = start_col + j
+                if (r != row or c != col) and board[r][c] == num:
+                    conflicts.append({'row': r, 'col': c, 'type': 'box'})
+    
+    return jsonify({'valid': is_valid, 'conflicts': conflicts})
 
 if __name__ == '__main__':
     app.run(debug=True)
