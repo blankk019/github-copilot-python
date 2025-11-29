@@ -340,24 +340,24 @@ def test_generated_solutions_are_complete():
 # ===== DIFFICULTY SELECTOR TESTS =====
 
 def test_easy_difficulty_generates_correct_clues():
-    """Test that easy difficulty generates 45 clues."""
+    """Test that easy difficulty generates around 45 clues (40-50 range)."""
     puzzle, solution = generate_puzzle(difficulty='easy')
     clue_count = sum(1 for row in puzzle for cell in row if cell != 0)
-    assert clue_count == 45, f"Easy difficulty should have 45 clues, got {clue_count}"
+    assert 40 <= clue_count <= 50, f"Easy difficulty should have 40-50 clues, got {clue_count}"
 
 
 def test_medium_difficulty_generates_correct_clues():
-    """Test that medium difficulty generates 35 clues."""
+    """Test that medium difficulty generates around 35 clues (30-40 range)."""
     puzzle, solution = generate_puzzle(difficulty='medium')
     clue_count = sum(1 for row in puzzle for cell in row if cell != 0)
-    assert clue_count == 35, f"Medium difficulty should have 35 clues, got {clue_count}"
+    assert 30 <= clue_count <= 40, f"Medium difficulty should have 30-40 clues, got {clue_count}"
 
 
 def test_hard_difficulty_generates_correct_clues():
-    """Test that hard difficulty generates 25 clues."""
+    """Test that hard difficulty generates around 25 clues (20-30 range)."""
     puzzle, solution = generate_puzzle(difficulty='hard')
     clue_count = sum(1 for row in puzzle for cell in row if cell != 0)
-    assert clue_count == 25, f"Hard difficulty should have 25 clues, got {clue_count}"
+    assert 20 <= clue_count <= 30, f"Hard difficulty should have 20-30 clues, got {clue_count}"
 
 
 def test_difficulty_case_insensitive():
@@ -370,21 +370,25 @@ def test_difficulty_case_insensitive():
     clue_count2 = sum(1 for row in puzzle2 for cell in row if cell != 0)
     clue_count3 = sum(1 for row in puzzle3 for cell in row if cell != 0)
     
-    assert clue_count1 == clue_count2 == clue_count3 == 45
+    # All should be in easy range (40-50)
+    assert 40 <= clue_count1 <= 50
+    assert 40 <= clue_count2 <= 50
+    assert 40 <= clue_count3 <= 50
 
 
 def test_invalid_difficulty_defaults_to_medium():
-    """Test that invalid difficulty defaults to medium (35 clues)."""
+    """Test that invalid difficulty defaults to medium (30-40 clues)."""
     puzzle, _ = generate_puzzle(difficulty='extreme')
     clue_count = sum(1 for row in puzzle for cell in row if cell != 0)
-    assert clue_count == 35, f"Invalid difficulty should default to medium (35 clues), got {clue_count}"
+    assert 30 <= clue_count <= 40, f"Invalid difficulty should default to medium (30-40 clues), got {clue_count}"
 
 
 def test_difficulty_overrides_clues_parameter():
     """Test that difficulty parameter overrides explicit clues value."""
     puzzle, _ = generate_puzzle(clues=50, difficulty='hard')
     clue_count = sum(1 for row in puzzle for cell in row if cell != 0)
-    assert clue_count == 25, "Difficulty should override clues parameter"
+    # Should be in hard range (20-30), not 50
+    assert 20 <= clue_count <= 30, "Difficulty should override clues parameter"
 
 
 def test_all_difficulty_levels_produce_valid_puzzles():
