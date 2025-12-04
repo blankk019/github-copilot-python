@@ -30,6 +30,8 @@ export class SudokuGame {
   async init() {
     this.setupEventListeners();
     this.ui.showStartModal();
+    // Ensure consistent board size on first load by rendering an empty grid
+    this.renderPuzzle(this.createEmptyBoard());
     this.leaderboard.display();
   }
 
