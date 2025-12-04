@@ -118,29 +118,43 @@ class SudokuService:
     
     @classmethod
     def remove_cells(cls, board: List[List[int]], clues: int) -> None:
-        """Remove cells from a complete board to create a puzzle.
-        
+        """Remove cells from a complete board to create a puzzle while preserving uniqueness.
+
+        Performs multiple passes over the board attempting removals until the target
+        number of clues is reached or no further removals are possible without breaking
+        uniqueness. This helps align prefilled cell counts with the selected difficulty.
+
         Args:
             board: Complete board to modify
             clues: Number of cells to keep filled
         """
         cells = [(r, c) for r in range(SIZE) for c in range(SIZE)]
-        random.shuffle(cells)
-        
         cells_to_remove = SIZE * SIZE - clues
         removed = 0
-        
-        for row, col in cells:
-            if removed >= cells_to_remove:
+
+        # Attempt multiple passes to reach the desired removal count
+        while removed < cells_to_remove:
+            random.shuffle(cells)
+            progress = False
+            for row, col in cells:
+                if removed >= cells_to_remove:
+                    break
+                # Skip already-empty cells
+                if board[row][col] == EMPTY:
+                    continue
+
+                backup = board[row][col]
+                board[row][col] = EMPTY
+
+                if cls.has_unique_solution(board):
+                    removed += 1
+                    progress = True
+                else:
+                    board[row][col] = backup
+
+            # If a full pass yields no removals, stop to avoid infinite loops
+            if not progress:
                 break
-            
-            backup = board[row][col]
-            board[row][col] = EMPTY
-            
-            if cls.has_unique_solution(board):
-                removed += 1
-            else:
-                board[row][col] = backup
     
     @classmethod
     def generate_puzzle(cls, difficulty: str = 'medium') -> Tuple[List[List[int]], List[List[int]]]:

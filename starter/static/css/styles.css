@@ -25,6 +25,7 @@ body {
 /* Card Styles */
 .game-card .card-header {
   background: linear-gradient(135deg, var(--primary-color), #0a58ca);
+  color: black;
 }
 
 .controls-card {
@@ -146,7 +147,7 @@ body {
 .sudoku-row:nth-child(9) .sudoku-cell:nth-child(7),
 .sudoku-row:nth-child(9) .sudoku-cell:nth-child(8),
 .sudoku-row:nth-child(9) .sudoku-cell:nth-child(9) {
-  background: #e8f4f8;
+  background: #d1e7f0;
 }
 
 /* Tablet devices */
@@ -664,6 +665,10 @@ body.dark-mode .card {
 
 body.dark-mode .card-header {
   background: linear-gradient(135deg, #1a237e 0%, #311b92 100%) !important;
+  color: white !important;
+}
+
+body.dark-mode .game-card .card-header {
   color: white !important;
 }
 

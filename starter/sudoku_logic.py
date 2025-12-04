@@ -74,28 +74,33 @@ def has_unique_solution(board):
 def remove_cells(board, clues):
     """
     Remove cells from a complete board to create a puzzle with unique solution.
-    Uses backtracking to ensure the puzzle maintains uniqueness.
+    Perform multiple passes attempting removals until the target is reached or
+    no further removals are possible without breaking uniqueness.
     """
     cells = [(r, c) for r in range(SIZE) for c in range(SIZE)]
-    random.shuffle(cells)
-    
     cells_to_remove = SIZE * SIZE - clues
     removed = 0
-    
-    for row, col in cells:
-        if removed >= cells_to_remove:
+
+    while removed < cells_to_remove:
+        random.shuffle(cells)
+        progress = False
+        for row, col in cells:
+            if removed >= cells_to_remove:
+                break
+            if board[row][col] == EMPTY:
+                continue
+
+            backup = board[row][col]
+            board[row][col] = EMPTY
+
+            if has_unique_solution(board):
+                removed += 1
+                progress = True
+            else:
+                board[row][col] = backup
+
+        if not progress:
             break
-        
-        # Store the value before removing
-        backup = board[row][col]
-        board[row][col] = EMPTY
-        
-        # Check if puzzle still has unique solution
-        if has_unique_solution(board):
-            removed += 1
-        else:
-            # Restore the cell if uniqueness is lost
-            board[row][col] = backup
 
 def get_clues_for_difficulty(difficulty='medium'):
     """

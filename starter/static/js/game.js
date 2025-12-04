@@ -11,8 +11,9 @@ export class SudokuGame {
   constructor() {
     this.puzzle = [];
     this.hintCount = 0;
-    this.currentDifficulty = "medium";
-    this.gameStarted = false;
+    this.difficulty = "medium";
+    this.isPlaying = false;
+    this.isComplete = false;
 
     // Initialize components
     this.timer = new Timer();
@@ -28,7 +29,7 @@ export class SudokuGame {
    */
   async init() {
     this.setupEventListeners();
-    await this.loadInitialGame();
+    this.ui.showStartModal();
     this.leaderboard.display();
   }
 
@@ -47,9 +48,7 @@ export class SudokuGame {
       .addEventListener("click", () => this.ui.hideCompletionModal());
 
     document.getElementById("player-name").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        this.submitScore();
-      }
+      if (e.key === "Enter") this.submitScore();
     });
 
     this.setupThemeToggle();
@@ -125,18 +124,23 @@ export class SudokuGame {
     const cell = e.target;
     let val = cell.value;
 
+    // Only keep the last digit if multiple are entered
+    if (val.length > 1) {
+      val = val.slice(-1);
+    }
+
     // Remove non-digit characters
     val = val.replace(/[^1-9]/g, "");
     cell.value = val;
 
+    // Clear previous error states for this cell
+    cell.classList.remove("incorrect", "invalid-move");
+    this.clearConflictHighlights();
+    this.ui.clearMessage();
+
     if (val) {
       const num = parseInt(val);
       await this.validateMove(cell, num);
-    } else {
-      // Clear all highlights when cell is emptied
-      cell.classList.remove("invalid-move");
-      this.clearConflictHighlights();
-      this.ui.clearMessage();
     }
   }
 
@@ -148,87 +152,84 @@ export class SudokuGame {
     this.puzzle = puzzle;
     this.createBoardElement();
 
-    const boardDiv = document.getElementById("sudoku-board");
-    const inputs = boardDiv.getElementsByTagName("input");
+    const inputs = document.getElementById("sudoku-board").getElementsByTagName("input");
 
     for (let i = 0; i < GAME_CONFIG.SIZE; i++) {
       for (let j = 0; j < GAME_CONFIG.SIZE; j++) {
         const idx = i * GAME_CONFIG.SIZE + j;
         const cell = inputs[idx];
+        const value = puzzle[i][j];
 
-        if (puzzle[i][j] !== GAME_CONFIG.EMPTY) {
-          cell.value = puzzle[i][j];
+        if (value !== GAME_CONFIG.EMPTY) {
+          cell.value = value;
           cell.disabled = true;
           cell.classList.add("prefilled");
         } else {
           cell.value = "";
-          cell.disabled = !this.gameStarted;
+          cell.disabled = !this.isPlaying;
         }
       }
     }
   }
 
   /**
-   * Start a new game
+   * Start a new game - shows modal and resets state
    */
-  async newGame() {
-    const difficulty = document.getElementById("difficulty").value;
-    this.currentDifficulty = difficulty;
+  newGame() {
+    this.resetGameState();
+    this.ui.showStartModal();
+    this.renderPuzzle(this.createEmptyBoard());
+    document.getElementById("difficulty").disabled = false;
+  }
+
+  /**
+   * Start the game from the modal - fetches and displays puzzle
+   */
+  async startGame() {
+    this.difficulty = document.getElementById("difficulty").value;
 
     try {
-      const response = await fetch(`${API_ENDPOINTS.NEW_GAME}?difficulty=${difficulty}`);
+      const response = await fetch(`${API_ENDPOINTS.NEW_GAME}?difficulty=${this.difficulty}`);
       const data = await response.json();
 
+      this.isPlaying = true;
       this.renderPuzzle(data.puzzle);
-      this.hintCount = 0;
-      this.ui.updateHintCounter(0);
-      this.ui.clearMessage();
-      this.ui.removeCelebration();
-      this.clearConflictHighlights();
-
-      this.timer.reset();
-      this.gameStarted = false;
-      this.ui.showStartModal();
-      this.ui.disableBoard();
+      this.ui.hideStartModal();
+      this.ui.enableBoard();
+      this.ui.enableActions();
+      document.getElementById("difficulty").disabled = true;
+      this.timer.start();
     } catch (error) {
-      this.ui.showMessage("Failed to start new game", "error");
-      console.error("Error starting new game:", error);
+      this.ui.showMessage("Failed to load puzzle", "error");
+      console.error("Error loading puzzle:", error);
     }
   }
 
   /**
-   * Start the game from the modal
-   */
-  startGame() {
-    this.gameStarted = true;
-    this.ui.hideStartModal();
-    this.ui.enableBoard();
-    this.timer.start();
-  }
-
-  /**
-   * Load initial game without starting timer
+   * Reset game state
    * @private
    */
-  async loadInitialGame() {
-    const difficulty = document.getElementById("difficulty").value;
-    this.currentDifficulty = difficulty;
+  resetGameState() {
+    this.hintCount = 0;
+    this.isPlaying = false;
+    this.isComplete = false;
+    this.ui.updateHintCounter(0);
+    this.ui.clearMessage();
+    this.ui.removeCelebration();
+    this.clearConflictHighlights();
+    this.timer.reset();
+    this.ui.disableBoard();
+    this.ui.enableActions();
+  }
 
-    try {
-      const response = await fetch(`${API_ENDPOINTS.NEW_GAME}?difficulty=${difficulty}`);
-      const data = await response.json();
-
-      this.renderPuzzle(data.puzzle);
-      this.hintCount = 0;
-      this.ui.updateHintCounter(0);
-      this.ui.clearMessage();
-
-      this.timer.reset();
-      this.gameStarted = false;
-    } catch (error) {
-      this.ui.showMessage("Failed to load game", "error");
-      console.error("Error loading game:", error);
-    }
+  /**
+   * Create empty board
+   * @private
+   */
+  createEmptyBoard() {
+    return Array(9)
+      .fill(null)
+      .map(() => Array(9).fill(0));
   }
 
   /**
@@ -257,6 +258,8 @@ export class SudokuGame {
    * Check the player's solution
    */
   async checkSolution() {
+    if (this.isComplete) return;
+
     const board = this.getCurrentBoard();
 
     try {
@@ -276,7 +279,7 @@ export class SudokuGame {
       this.markIncorrectCells(data.incorrect);
 
       if (data.incorrect.length === 0) {
-        this.handlePuzzleCompletion();
+        this.completePuzzle();
       } else {
         this.ui.showMessage("Some cells are incorrect.", "error");
       }
@@ -311,20 +314,20 @@ export class SudokuGame {
    * Handle puzzle completion
    * @private
    */
-  handlePuzzleCompletion() {
+  completePuzzle() {
+    if (this.isComplete) return;
+
+    this.isComplete = true;
     this.timer.stop();
     this.ui.showMessage("🎉 Congratulations! You solved it! 🎉", "success");
+    this.ui.disableBoard();
+    this.ui.disableActions();
 
-    const boardDiv = document.getElementById("sudoku-board");
-    boardDiv.classList.add("puzzle-complete");
+    document.getElementById("sudoku-board").classList.add("puzzle-complete");
     this.ui.celebratePuzzleCompletion();
 
     setTimeout(() => {
-      this.ui.showCompletionModal(
-        this.timer.getElapsedTime(),
-        this.currentDifficulty,
-        this.hintCount
-      );
+      this.ui.showCompletionModal(this.timer.getElapsedTime(), this.difficulty, this.hintCount);
     }, GAME_CONFIG.COMPLETION_MODAL_DELAY);
   }
 
@@ -332,10 +335,8 @@ export class SudokuGame {
    * Check if puzzle is complete after a valid move
    * @private
    */
-  async checkPuzzleCompletion() {
+  async checkIfComplete() {
     const board = this.getCurrentBoard();
-
-    // Check if board is completely filled
     const isFilled = board.every((row) => row.every((cell) => cell !== GAME_CONFIG.EMPTY));
 
     if (!isFilled) return;
@@ -350,7 +351,7 @@ export class SudokuGame {
       const data = await response.json();
 
       if (data.incorrect && data.incorrect.length === 0) {
-        this.handlePuzzleCompletion();
+        this.completePuzzle();
       }
     } catch (error) {
       console.error("Error checking completion:", error);
@@ -367,61 +368,54 @@ export class SudokuGame {
     const row = parseInt(cellInput.dataset.row);
     const col = parseInt(cellInput.dataset.col);
     const board = this.getCurrentBoard();
-    // Place the tentative number logically for local conflict check
-    board[row][col] = num;
+
+    // Create board without current cell to avoid self-conflict
+    const boardForCheck = board.map((r) => r.slice());
+    boardForCheck[row][col] = GAME_CONFIG.EMPTY;
 
     // Client-side conflict detection for instant feedback
-    const localConflicts = this.getLocalConflicts(board, row, col, num);
-    if (localConflicts.length > 0) {
+    const conflicts = this.getLocalConflicts(boardForCheck, row, col, num);
+
+    if (conflicts.length > 0) {
       cellInput.classList.add("invalid-move");
-      this.highlightConflicts(localConflicts, row, col, num);
-      return; // Skip server validation; already invalid
+      this.highlightConflicts(conflicts, num);
+      return;
     }
 
-    try {
-      const response = await fetch(API_ENDPOINTS.VALIDATE_MOVE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ board, row, col, num }),
-      });
-      const data = await response.json();
-      if (data.valid) {
-        cellInput.classList.remove("invalid-move");
-        this.clearConflictHighlights();
-        await this.checkPuzzleCompletion();
-      } else {
-        cellInput.classList.add("invalid-move");
-        this.highlightConflicts(data.conflicts, row, col, num);
-      }
-    } catch (error) {
-      console.error("Error validating move:", error);
-    }
+    cellInput.classList.remove("invalid-move");
+    this.clearConflictHighlights();
+
+    // Check if puzzle is now complete
+    await this.checkIfComplete();
   }
 
   /**
    * Compute local conflicts without server round-trip
-   * @param {Array} board - Current board with tentative value placed
+   * @param {Array} board - Current board state
    * @param {number} row
    * @param {number} col
    * @param {number} num
-   * @returns {Array} conflicts objects {row,col,type}
+   * @returns {Array} conflicts array with {row, col, type}
    * @private
    */
   getLocalConflicts(board, row, col, num) {
     const conflicts = [];
-    // Row
+
+    // Check row
     for (let c = 0; c < GAME_CONFIG.SIZE; c++) {
       if (c !== col && board[row][c] === num) {
         conflicts.push({ row, col: c, type: "row" });
       }
     }
-    // Column
+
+    // Check column
     for (let r = 0; r < GAME_CONFIG.SIZE; r++) {
       if (r !== row && board[r][col] === num) {
         conflicts.push({ row: r, col, type: "column" });
       }
     }
-    // Box
+
+    // Check 3x3 box
     const startRow = row - (row % 3);
     const startCol = col - (col % 3);
     for (let i = 0; i < 3; i++) {
@@ -433,54 +427,38 @@ export class SudokuGame {
         }
       }
     }
-    // Deduplicate (in rare edge cases)
-    const seen = new Set();
-    return conflicts.filter((c) => {
-      const key = `${c.row}-${c.col}-${c.type}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+
+    return conflicts;
   }
 
   /**
    * Highlight conflicting cells
-   * @param {Array} conflicts - Array of conflict objects with row, col, and type
-   * @param {number} currentRow - Current cell row
-   * @param {number} currentCol - Current cell column
+   * @param {Array} conflicts - Array of conflict objects
    * @param {number} num - The conflicting number
    * @private
    */
-  highlightConflicts(conflicts, currentRow, currentCol, num) {
-    // Clear previous conflict highlights first
+  highlightConflicts(conflicts, num) {
     this.clearConflictHighlights();
 
     if (!conflicts || conflicts.length === 0) return;
 
-    const boardDiv = document.getElementById("sudoku-board");
-    const inputs = boardDiv.getElementsByTagName("input");
-
-    // Group conflicts by type for the message
+    const inputs = document.getElementById("sudoku-board").getElementsByTagName("input");
     const conflictTypes = new Set(conflicts.map((c) => c.type));
-    const conflictMessages = [];
+    const messages = [];
 
-    if (conflictTypes.has("row")) conflictMessages.push("same row");
-    if (conflictTypes.has("column")) conflictMessages.push("same column");
-    if (conflictTypes.has("box")) conflictMessages.push("same 3×3 box");
+    if (conflictTypes.has("row")) messages.push("same row");
+    if (conflictTypes.has("column")) messages.push("same column");
+    if (conflictTypes.has("box")) messages.push("same 3×3 box");
 
-    // Highlight each conflicting cell
     conflicts.forEach((conflict) => {
       const idx = conflict.row * GAME_CONFIG.SIZE + conflict.col;
-      const conflictCell = inputs[idx];
-      if (conflictCell) {
-        conflictCell.classList.add("conflict-cell");
-        conflictCell.dataset.conflictType = conflict.type;
+      const cell = inputs[idx];
+      if (cell) {
+        cell.classList.add("conflict-cell");
       }
     });
 
-    // Show message explaining the conflict
-    const message = `${num} already exists in ${conflictMessages.join(", ")}`;
-    this.ui.showMessage(message, "error");
+    this.ui.showMessage(`${num} already exists in ${messages.join(", ")}`, "error");
   }
 
   /**
@@ -488,12 +466,9 @@ export class SudokuGame {
    * @private
    */
   clearConflictHighlights() {
-    const boardDiv = document.getElementById("sudoku-board");
-    const inputs = boardDiv.getElementsByTagName("input");
-
+    const inputs = document.getElementById("sudoku-board").getElementsByTagName("input");
     for (let input of inputs) {
       input.classList.remove("conflict-cell");
-      delete input.dataset.conflictType;
     }
   }
 
@@ -530,13 +505,16 @@ export class SudokuGame {
    */
   applyHint(hint) {
     const { row, col, value } = hint;
-    const boardDiv = document.getElementById("sudoku-board");
-    const inputs = boardDiv.getElementsByTagName("input");
+    const inputs = document.getElementById("sudoku-board").getElementsByTagName("input");
     const idx = row * GAME_CONFIG.SIZE + col;
     const cell = inputs[idx];
 
     if (cell && !cell.disabled) {
       cell.value = value;
+      cell.classList.remove("incorrect", "invalid-move");
+      this.clearConflictHighlights();
+      this.ui.clearMessage();
+
       cell.classList.add("hint-cell");
       cell.disabled = true;
 
@@ -544,9 +522,9 @@ export class SudokuGame {
       this.ui.updateHintCounter(this.hintCount);
       this.ui.showMessage(`Hint applied: ${value} at row ${row + 1}, column ${col + 1}`, "success");
 
-      setTimeout(() => {
-        cell.classList.remove("hint-cell");
-      }, 2000);
+      setTimeout(() => cell.classList.remove("hint-cell"), 2000);
+
+      this.checkIfComplete();
     }
   }
 
@@ -555,12 +533,7 @@ export class SudokuGame {
    */
   submitScore() {
     const name = this.ui.getPlayerName();
-    this.leaderboard.saveScore(
-      name,
-      this.timer.getElapsedTime(),
-      this.currentDifficulty,
-      this.hintCount
-    );
+    this.leaderboard.saveScore(name, this.timer.getElapsedTime(), this.difficulty, this.hintCount);
     this.ui.hideCompletionModal();
   }
 }

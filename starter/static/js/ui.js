@@ -13,6 +13,9 @@ export class UIManager {
     this.nameModal = null;
     this.nameInput = document.getElementById("player-name");
     this.statsElement = document.getElementById("completion-stats");
+    this.btnNewGame = document.getElementById("new-game");
+    this.btnCheck = document.getElementById("check-solution");
+    this.btnHint = document.getElementById("hints-button");
   }
 
   /**
@@ -159,5 +162,21 @@ export class UIManager {
         input.disabled = false;
       }
     }
+  }
+
+  /**
+   * Disable action buttons except New Game
+   */
+  disableActions() {
+    if (this.btnCheck) this.btnCheck.disabled = true;
+    if (this.btnHint) this.btnHint.disabled = true;
+  }
+
+  /**
+   * Enable action buttons (used on new game/start)
+   */
+  enableActions() {
+    if (this.btnCheck) this.btnCheck.disabled = false;
+    if (this.btnHint) this.btnHint.disabled = false;
   }
 }
