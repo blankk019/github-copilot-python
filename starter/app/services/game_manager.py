@@ -1,5 +1,6 @@
 """Game state management service."""
-from typing import Optional
+from typing import Optional, Dict, Tuple
+import threading
 from app.models import GameState
 from app.services.sudoku_service import SudokuService
 
@@ -10,6 +11,19 @@ class GameManager:
     def __init__(self):
         """Initialize the game manager."""
         self._current_game: Optional[GameState] = None
+        # Simple per-difficulty cache of pre-generated puzzles to reduce latency
+        self._cache: Dict[str, Tuple[list, list]] = {}
+        self._cache_lock = threading.Lock()
+
+    def _generate_and_fill_cache(self, difficulty: str) -> None:
+        """Background task to generate and store a puzzle for the given difficulty."""
+        try:
+            puzzle, solution = SudokuService.generate_puzzle(difficulty)
+            with self._cache_lock:
+                self._cache[difficulty] = (puzzle, solution)
+        except Exception:
+            # Avoid crashing background thread; cache miss will fallback to sync generation
+            pass
     
     @property
     def current_game(self) -> Optional[GameState]:
@@ -29,7 +43,18 @@ class GameManager:
         Returns:
             New game state
         """
-        puzzle, solution = SudokuService.generate_puzzle(difficulty)
+        # Serve from cache if available for near-instant response
+        with self._cache_lock:
+            cached = self._cache.get(difficulty)
+
+        if cached:
+            puzzle, solution = cached
+            # Refresh cache asynchronously for the next request
+            threading.Thread(target=self._generate_and_fill_cache, args=(difficulty,), daemon=True).start()
+        else:
+            # Fallback to synchronous generation on first request; also warm the cache
+            puzzle, solution = SudokuService.generate_puzzle(difficulty)
+            threading.Thread(target=self._generate_and_fill_cache, args=(difficulty,), daemon=True).start()
         self._current_game = GameState(
             puzzle=puzzle,
             solution=solution,

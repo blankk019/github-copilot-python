@@ -21,4 +21,14 @@ def create_app(config_class=Config):
     from app.routes import sudoku_bp
     app.register_blueprint(sudoku_bp)
     
+    # Warm puzzle cache in background for common difficulties to reduce latency
+    try:
+        from app.services import game_manager
+        import threading
+        for diff in ('easy', 'medium', 'hard'):
+            threading.Thread(target=game_manager._generate_and_fill_cache, args=(diff,), daemon=True).start()
+    except Exception:
+        # Cache warm-up is optional; ignore failures to avoid impacting app startup
+        pass
+    
     return app
